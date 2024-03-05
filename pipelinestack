@@ -1,0 +1,43 @@
+#Pipeline Stack
+from constructs import Construct
+from aws_cdk import (
+    Stack,
+    aws_codecommit as codecommit,
+    pipelines as pipelines,
+)
+import aws_cdk as cdk
+
+from .pipeline_stage import PipelineStage
+app = cdk.App()
+#VPC_ID = "vpc-0bd4b61810acf1bbe"
+vpc_id = app.node.try_get_context("VPC_ID")
+
+class PipelineStack(Stack):
+
+    def __init__(self, scope: Construct, id: str, vpc_id: str, **kwargs) -> None:
+        super().__init__(scope, id, **kwargs)
+        
+        repo = codecommit.Repository(self, 'isolate-ec2-repo',
+        repository_name = "ec2_isolate_repo_teamC"
+        )
+        
+        pipeline = pipelines.CodePipeline(
+            self,
+            "Pipeline",
+            pipeline_name="Isolate-ec2-Pipeline-teamC",
+            synth=pipelines.ShellStep(
+                "Synth",
+                input=pipelines.CodePipelineSource.code_commit(repo, "master"),
+                commands=[
+                    "npm install -g aws-cdk",  # Installs the cdk cli on Codebuild
+                    "pip install -r requirements.txt",  # Instructs Codebuild to install required packages
+                    "cdk synth",
+                    "cdk ls",
+                    "pytest tests/unit/test_ec2_isolation_cdk_demo_stack.py",
+                    "pytest tests/unit/test_sns_topic.py",
+                ]
+            ),
+        )
+        
+        deploy = PipelineStage(self, "Deploy", vpc_id=vpc_id)
+        deploy_stage = pipeline.add_stage(deploy)
