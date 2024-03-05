@@ -1,0 +1,68 @@
+#test_ec2_isolation_cdk_demo_stack
+import unittest
+
+#from basicinfradev import Ec2IsolationcdkDemoStack
+import aws_cdk as cdk
+from constructs import Construct
+from aws_cdk import (
+    Stack,
+    aws_stepfunctions as sfn,
+    aws_stepfunctions_tasks as tasks,
+    aws_ec2 as ec2,
+    aws_sns as sns,
+    aws_sns_subscriptions as subscriptions,
+    )
+from aws_cdk import (Fn, CfnOutput,Duration)
+import aws_cdk.assertions as assertion
+from ec2_isolation_cdk_demo.isolate_ec2_stack import IsolateEc2Stack
+#from ec2_isolation_cdk_demo.basic_infra_dev_stack import BasicInfraDevStack
+VPC_ID =  'vpc-0bd4b61810acf1bbe'
+app = cdk.App()
+
+
+class TestEC2Management(unittest.TestCase):
+    
+    def test_check_and_enable_termination_protection(self):
+        # Mock the describe_instance_attribute response
+        response ={
+            'DisableApiTermination': {
+                'Value': False 
+            },
+        }
+# #    check_and_enable_termination_protection('i-00a4331ecb0be0f74')
+    # def test_tag_ec2_instance(self):
+    # # Create an instance.
+    #     env=cdk.Environment(account="317623606131", region="eu-central-1")
+    #     stack = Ec2IsolationCdkDemoStack(app, "ec2-isolation-cdk-demo", env= env,vpc_id=VPC_ID)
+    #     template = assertion.Template.from_stack(stack)
+    #         # Assert that the instance is tagged.
+    #     assert cdk.Tags.of(instance).get("status") == "quarantined"
+
+    def test_stack_creation(self):
+        env=cdk.Environment(account="600032437742", region="eu-central-1")
+        stack = IsolateEc2Stack(app,"IsolateEc2Stack", env= env,vpc_id=VPC_ID)
+        template = assertion.Template.from_stack(stack)
+        # Assert that the stack has been created
+        self.assertIsNotNone(stack)
+
+        # Assert the number of resources in the stack
+        self.assertEqual(len(stack.node.children),32)  # Assuming only one construct in the stack
+
+        # Assert the specific resources created in the stack
+        # Modify the assertions based on your specific resource expectations
+        self.assertIsInstance(stack.node.children[0], sns.Topic)  # SNS Topic
+        self.assertIsInstance(stack.node.children[1], tasks.CallAwsService)  # Instance Metadata task
+
+    # def test_metadata_creation(self):
+    #     env=cdk.Environment(account="317623606131", region="eu-central-1")
+    #     stack = IsolateEc2Stack(app,"IsolateEc2Stack", env= env,vpc_id=VPC_ID)
+    #     template = assertion.Template.from_stack(stack)
+      
+    # # Check if the instance metadata construct exists
+    #     metadata_construct = self.deployed_stack.node.try_get_child_by_type(tasks.CallAwsService)
+    #     self.assertIsNotNone(metadata_construct)
+
+    # # Assert the specific properties of the metadata construct
+    # # Modify the assertions based on your specific expectations
+    #     self.assertEqual(metadata_construct.service, "ec2")
+    #     self.assertEqual(metadata_construct.action, "describeInstances")
