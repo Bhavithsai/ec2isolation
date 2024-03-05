@@ -1,0 +1,40 @@
+#test_sns_topic
+import aws_cdk as cdk
+import aws_cdk.assertions as assertions
+#from ec2_isolation_cdk_demo.ec2_isolation_cdk_demo_stack import Ec2IsolationCdkDemoStack
+from ec2_isolation_cdk_demo.isolate_ec2_stack import IsolateEc2Stack
+VPC_ID =  'vpc-0bd4b61810acf1bbe'
+
+#def test_sqs_queue_created():
+#    app = core.App()
+#    stack = Ec2IsolationCdkDemoStack(app, "ec2-isolation-cdk-demo")
+#   template = assertions.Template.from_stack(stack)
+
+#    template.has_resource_properties("AWS::SQS::Queue", {
+#        "VisibilityTimeout": 300
+#    })
+
+
+def test_sns_topic_created():
+    app = cdk.App()
+    env=cdk.Environment(account="600032437742", region="eu-central-1")
+    stack = IsolateEc2Stack(app, "IsolateEc2Stack",env= env,vpc_id=VPC_ID)
+    template = assertions.Template.from_stack(stack)
+
+    template.resource_count_is("AWS::SNS::Topic", 1)
+    template.has_resource_properties(
+        "AWS::SNS::Topic",
+        {
+            "TopicName": "teamC-topic"
+        }
+        )
+# def test_sns():
+    # env=cdk.Environment(account="600032437742", region="eu-central-1")
+    # stack = IsolateEc2Stack(app,"IsolateEc2Stack", env= env,vpc_id=VPC_ID)
+    # template = assertion.Template.from_stack(stack)
+    # template.has_resource_properties(
+    #     "AWS::SNS::Topic",
+    #     {
+    #         "TopicName": "teamC-topic"
+    #     }
+    #     )
