@@ -1,0 +1,24 @@
+#Pipeline Stage
+from constructs import Construct
+from aws_cdk import (
+    Stage
+)
+import aws_cdk as cdk
+from .isolate_ec2_stack import IsolateEc2Stack
+
+#VPC_ID =  'vpc-0bd4b61810acf1bbe'
+app = cdk.App()
+
+vpc_id = app.node.try_get_context("VPC_ID")
+accountid = app.node.try_get_context("accountid")
+region = app.node.try_get_context("region")
+
+env_EU = cdk.Environment(account=accountid, region=region)
+
+class PipelineStage(Stage):
+
+    def __init__(self, scope: Construct, id: str, vpc_id: str, **kwargs):
+        super().__init__(scope, id, **kwargs)
+
+        #service = IsolateEc2Stack(self, "isolate-ec2-stack", vpc_id=VPC_ID, env=cdk.Environment(account="600032437742", region="eu-central-1"))
+        service = IsolateEc2Stack(self, "isolate-ec2-stack", vpc_id=vpc_id, env=env_EU)
