@@ -1,0 +1,159 @@
+import os
+import re
+from constructs import Construct
+import aws_cdk as cdk
+from aws_cdk import assertions
+from aws_cdk import integ_tests_alpha
+from aws_cdk.assertions import Match, Capture, Template
+from aws_cdk import (aws_sns as sns, aws_stepfunctions as sfn, aws_stepfunctions_tasks)
+
+from ec2_isolate.ec2_isolate_stack import SfnStack
+from tests import app
+
+#test
+ec2_isolate_stack_test = SfnStack(app, "SfnStack")
+ec2_isolate_stack_template = assertions.Template.from_stack(ec2_isolate_stack_test)
+
+def test_capture_output():
+    
+    outputs = Capture()
+    
+    ec2_isolate_stack_template.has_output('*', props=outputs)
+    ec2_isolate_stack_template.find_outputs('*', props=outputs)
+    print(outputs)
+    
+def test_snapshot_match(snapshot):
+    
+    assert ec2_isolate_stack_template.to_json() == snapshot
+    
+    
+def test_statemachine():
+    
+    ec2_isolate_stack_template.has_resource_properties(
+        "AWS::StepFunctions::StateMachine",
+        {
+            "StateMachineName": "EC2Isolate_StateMachine"
+        }
+        )
+        
+    definition = Capture()
+    ec2_isolate_stack_template.has_resource_properties(
+        "AWS::StepFunctions::StateMachine", {
+            "DefinitionString" : definition
+        }
+        )
+        
+def test_sns_api_call():
+    
+    snsapi_call = integ_tests_alpha.AwsApiCall(ec2_isolate_stack_test, "Publish",
+    service="sns",
+    api="Publish"
+    )
+    
+def test_Create_SG_for_IsolatedInstance():
+    
+    create_ec2_IsolatedSG_api_call = integ_tests_alpha.AwsApiCall(ec2_isolate_stack_test, "create_ec2_IsolatedSG_api_call",
+    service="ec2",
+    api="createSecurityGroup"
+    )
+    
+    create_ec2_IsolatedSG_integ_test = integ_tests_alpha.AwsApiCall(ec2_isolate_stack_test, "create_ec2_IsolatedSG_integ_test",
+    service="ec2",
+    api="createSecurityGroup",
+    parameters = {
+        "Description": "EC2IsolateSG",
+        "GroupName": "EC2IsolateSG",
+        "VpcId": sfn.JsonPath.string_at("$.InstanceDescription.Reservations[0].Instances[0].NetworkInterfaces[0].VpcId"),
+    }
+    )
+    
+    integ = integ_tests_alpha.IntegTest(app, "create_ec2_IsolatedSG",
+    test_cases=[ec2_isolate_stack_test])
+    
+    integ.assertions.aws_api_call("ec2", "createSecurityGroup", {
+        "Description": "EC2IsolateSG",
+        "GroupName": "EC2IsolateSG",
+        "VpcId": sfn.JsonPath.string_at("$.InstanceDescription.Reservations[0].Instances[0].NetworkInterfaces[0].VpcId"),
+    })
+    
+def test_Verify_ASG_Attachment():
+    
+    Verify_ASG_Attachment_api_call = integ_tests_alpha.AwsApiCall(ec2_isolate_stack_test, "Verify_ASG_Attachment_api_call",
+    service="autoscaling",
+    api="describeAutoScalingInstances"
+    )
+    
+    Verify_ASG_Attachment_integ_test = integ_tests_alpha.AwsApiCall(ec2_isolate_stack_test, "Verify_ASG_Attachment_integ_test",
+    service="autoscaling",
+    api="describeAutoScalingInstances",
+    parameters = {
+        "InstanceIds": sfn.JsonPath.string_at("States.Array($.InstanceId)")
+    }
+    )
+    
+    integ = integ_tests_alpha.IntegTest(app, "Verify_ASG_Attachment",
+    test_cases=[ec2_isolate_stack_test])
+    
+    integ.assertions.aws_api_call("autoscaling", "describeAutoScalingInstances", {
+        "InstanceIds": sfn.JsonPath.string_at("States.Array($.InstanceId)")
+    })
+    
+def test_Detach_Instance_from_ASG():
+    
+    Detach_Instance_from_ASG_api_call = integ_tests_alpha.AwsApiCall(ec2_isolate_stack_test, "Detach_Instance_from_ASG_api_call",
+    service="autoscaling",
+    api="describeAutoScalingInstances"
+    )
+    
+    Detach_Instance_from_ASG_integ_test = integ_tests_alpha.AwsApiCall(ec2_isolate_stack_test, "Detach_Instance_from_ASG_integ_test",
+    service="autoscaling",
+    api="detachInstances",
+    parameters = {
+        "AutoScalingGroupName": sfn.JsonPath.string_at("$.AutoScalingAttachment.AutoScalingInstances[0].AutoScalingGroupName"),
+        "ShouldDecrementDesiredCapacity": "false",
+        "InstanceIds": sfn.JsonPath.string_at("States.Array($.IsolatedInstanceId)")
+    }
+    )
+    
+    integ = integ_tests_alpha.IntegTest(app, "Detach_Instance_from_ASG",
+    test_cases=[ec2_isolate_stack_test])
+    
+    integ.assertions.aws_api_call("autoscaling", "detachInstances", {
+        "AutoScalingGroupName": sfn.JsonPath.string_at("$.AutoScalingAttachment.AutoScalingInstances[0].AutoScalingGroupName"),
+        "ShouldDecrementDesiredCapacity": "false",
+        "InstanceIds": sfn.JsonPath.string_at("States.Array($.IsolatedInstanceId)")
+    })
+        
+def test_attach_tag_to_instance():
+    
+    attach_tag_to_instance_api_call = integ_tests_alpha.AwsApiCall(ec2_isolate_stack_test, "attach_tag_to_instance_api_call",
+    service="ec2",
+    api="createTags"
+    )
+    
+    attach_tag_to_instance_integ_test = integ_tests_alpha.AwsApiCall(ec2_isolate_stack_test, "attach_tag_to_instance_integ_test",
+    service="ec2",
+    api="createTags",
+    parameters = {
+        "Resources": sfn.JsonPath.string_at("States.Array($.IsolatedInstanceId)"),
+        "Tags": [
+            {
+                "Key": "Status",
+                "Value": "Quarantined"
+            }
+        ]
+    }
+    )
+    
+    integ = integ_tests_alpha.IntegTest(app, "attach_tag_to_instance",
+    test_cases=[ec2_isolate_stack_test])
+    
+    integ.assertions.aws_api_call("ec2", "createTags", {
+        "Resources": sfn.JsonPath.string_at("States.Array($.IsolatedInstanceId)"),
+        "Tags": [
+            {
+                "Key": "Status",
+                "Value": "Quarantined"
+            }
+        ]
+    })
