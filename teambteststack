@@ -1,0 +1,77 @@
+import os
+from constructs import Construct
+import aws_cdk as cdk
+from aws_cdk import assertions
+from aws_cdk import integ_tests_alpha
+from aws_cdk.assertions import Match, Capture, Template
+from aws_cdk import (aws_lambda as _lambda, aws_iam as iam)
+import boto3
+import pytest
+from moto import mock_ec2, mock_autoscaling
+from tests import app
+from tests import Test_AMI_ID
+
+
+@mock_autoscaling
+@mock_ec2
+def test_create_ec2():
+    
+    ec2 = boto3.client('ec2', region_name= "eu-central-1")
+    response = ec2.describe_subnets(
+        Filters=[
+            {
+                'Name': 'tag-key',
+                'Values': [
+                    'VPCId',
+                    ],
+                
+            },
+            ],
+            )
+    print(response)
+    
+@mock_ec2
+def setup_subnet(region_name= "eu-central-1"):
+    ec2 = boto3.resource("ec2", region_name=region_name)
+    vpc = ec2.create_vpc(CidrBlock="10.11.0.0/16")
+    subnet1 = ec2.create_subnet(
+        VpcId=vpc.id, CidrBlock="10.11.1.0/24", AvailabilityZone=f"{region_name}a"
+    )
+    subnet2 = ec2.create_subnet(
+        VpcId=vpc.id, CidrBlock="10.11.2.0/24", AvailabilityZone=f"{region_name}b"
+    )
+    return {"vpc": vpc.id, "subnet1": subnet1.id, "subnet2": subnet2.id}
+    
+    
+@mock_autoscaling
+@mock_ec2
+def test_asg():
+    
+    mock_subnet = setup_subnet()
+    asg = boto3.client('autoscaling',region_name= "eu-central-1")
+    Launch_config = asg.create_launch_configuration(
+        LaunchConfigurationName = "EC2Isolate_LauchConfig",
+        ImageId=Test_AMI_ID,
+        InstanceType = "t2.micro"
+        )
+    
+    #asg = boto3.client('autoscaling',region_name= "eu-central-1")
+    Create_ASG = asg.create_auto_scaling_group(
+        AutoScalingGroupName='EC2Isolate_ASG',
+        LaunchConfigurationName ="EC2Isolate_LauchConfig",
+        MinSize=1,
+        MaxSize=2,
+        DesiredCapacity=1,
+        HealthCheckType = 'EC2',
+        HealthCheckGracePeriod = 60,
+        Tags = [
+            {
+                'ResourceId' : "EC2Isolate_ASG",
+                'ResourceType' : 'auto-scaling-group',
+                'Key' : 'Name',
+                'Value' : 'EC2Isolate_ASG_Instance',
+                'PropagateAtLaunch' : True
+            },
+        ],
+        VPCZoneIdentifier = mock_subnet["subnet1"]
+        )
